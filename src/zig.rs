@@ -85,6 +85,7 @@ impl Zig {
         let is_macos = target.map(|x| x.contains("macos")).unwrap_or_default();
 
         let rustc_ver = rustc_version::version()?;
+        let zig_version = Zig::zig_version()?;
 
         let filter_linker_arg = |arg: &str| {
             if arg == "-lgcc_s" {
@@ -104,6 +105,8 @@ impl Zig {
                     // zig doesn't provide gcc_eh alternative
                     // We use libc++ to replace it on windows gnu targets
                     return Some("-lc++".to_string());
+                } else if arg == "-Wl,-Bdynamic" && Self::is_zig_above_0_11(&zig_version) {
+                    return Some("-Wl,-search_paths_first".to_owned());
                 } else if arg == "-lwindows" || arg == "-l:libpthread.a" || arg == "-lgcc" {
                     return None;
                 } else if arg == "-Wl,--disable-auto-image-base"
@@ -502,13 +505,17 @@ impl Zig {
         Ok(())
     }
 
+    fn is_zig_above_0_11(zig_version: &Version) -> bool {
+        zig_version.major == 0 && zig_version.minor >= 11
+    }
+
     fn workaround_for_zig_0_11_with_musl(
         cmd: &mut Command,
         zig_version: &Version,
         raw_target: &String,
         env_target: &String,
     ) {
-        if zig_version.major == 0 && zig_version.minor == 11 && raw_target.contains("musl") {
+        if Self::is_zig_above_0_11(zig_version) && raw_target.contains("musl") {
             Self::add_env_if_missing(
                 cmd,
                 format!("CARGO_TARGET_{}_LINKER", env_target.to_uppercase()),
